@@ -1,5 +1,7 @@
 "use server";
 
+import { getPrismaClient } from "@/lib/prisma";
+
 /**
  * DASHBOARD ACTIONS FOR BADGET FINANCIAL MANAGEMENT
  * =================================================
@@ -51,7 +53,6 @@
  * - Family-scoped queries ensure data isolation and performance
  */
 
-import { PrismaClient } from "@/generated/prisma";
 import { getCurrentAppUser } from "./user-actions";
 import type {
   TransactionStatus,
@@ -66,10 +67,6 @@ import {
 } from "@/lib/expense-categories";
 
 // Prisma client instantiation per request (best practice)
-function getPrismaClient() {
-  return new PrismaClient();
-}
-
 // Types for better TypeScript support
 type GetTransactionsOptions = {
   limit?: number;
@@ -255,7 +252,7 @@ export async function getAllTransactions(
       totalPages: 0,
     };
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -326,7 +323,7 @@ export async function getTransactions(options: GetTransactionsOptions = {}) {
     console.error("Error fetching transactions:", error);
     return [];
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -366,7 +363,7 @@ export async function getFinancialAccounts() {
     console.error("Error fetching financial accounts:", error);
     return [];
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -506,7 +503,7 @@ export async function getFinancialMetrics(): Promise<DashboardMetrics> {
       },
     };
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -555,7 +552,7 @@ export async function getFinancialGoals() {
     console.error("Error fetching financial goals:", error);
     return [];
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -596,7 +593,7 @@ export async function getCategories() {
     console.error("Error fetching categories:", error);
     return [];
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -666,7 +663,7 @@ export async function getSpendingTrends(months: number = 6) {
     console.error("Error fetching spending trends:", error);
     return [];
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -737,7 +734,7 @@ export async function resetUserData() {
     console.error("Error resetting user data:", error);
     throw new Error("Failed to reset user data");
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -1169,7 +1166,7 @@ export async function seedUserData(resetFirst: boolean = false) {
     console.error("Error seeding user data:", error);
     throw new Error("Failed to seed user data");
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -1255,6 +1252,6 @@ export async function updateTransactionCategory(
     console.error("Error updating transaction category:", error);
     throw error;
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }

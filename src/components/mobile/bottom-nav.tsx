@@ -72,7 +72,7 @@ export function MobileBottomNav() {
     <>
       <nav
         aria-label="Navegação principal"
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
       >
         <ul className="liquid-glass pointer-events-auto mx-auto grid h-[4.25rem] max-w-md grid-cols-5 items-end rounded-[1.75rem] px-1.5 shadow-[0_8px_32px_rgb(0_0_0_/_0.12),inset_0_1px_0_rgb(255_255_255_/_0.35)]">
           {tabs.map((tab) => {

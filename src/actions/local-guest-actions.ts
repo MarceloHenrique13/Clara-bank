@@ -1,6 +1,7 @@
 "use server";
 
-import { PrismaClient } from "@/generated/prisma";
+import { getPrismaClient } from "@/lib/prisma";
+
 import {
   LOCAL_GUEST_APP_USER_ID,
   LOCAL_GUEST_EMAIL,
@@ -8,10 +9,6 @@ import {
   LOCAL_GUEST_USER_ID,
   isAuthRequired,
 } from "@/lib/local-guest";
-
-function getPrismaClient() {
-  return new PrismaClient();
-}
 
 const appUserInclude = {
   familyMemberships: {
@@ -95,6 +92,6 @@ export async function ensureLocalGuestAppUser() {
     console.error("Error ensuring local guest user:", error);
     return null;
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }

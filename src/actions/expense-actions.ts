@@ -1,6 +1,7 @@
 "use server";
 
-import { PrismaClient } from "@/generated/prisma";
+import { getPrismaClient } from "@/lib/prisma";
+
 import { revalidatePath } from "next/cache";
 import { getCurrentAppUser } from "./user-actions";
 import {
@@ -15,10 +16,6 @@ import {
   resolveStatementTransactionDate,
   type StatementCycleChoice,
 } from "@/lib/credit-card-cycle";
-
-function getPrismaClient() {
-  return new PrismaClient();
-}
 
 async function getActiveFamilyId(): Promise<string | null> {
   const appUser = await getCurrentAppUser();
@@ -74,7 +71,7 @@ export async function ensureDefaultExpenseCategories(familyId: string) {
       )
     );
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -128,7 +125,7 @@ export async function getExpenseFormData(entryType: "expense" | "income" = "expe
     console.error("Error loading expense form data:", error);
     return { categories: [], accounts: [] };
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -326,7 +323,7 @@ export async function createMoneyEntry(input: {
         : "Não foi possível salvar a receita",
     };
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -430,7 +427,7 @@ export async function createTransfer(input: {
       error: "Não foi possível salvar a transferência",
     };
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -486,7 +483,7 @@ export async function updateCreditCardCycle(input: {
     console.error("Error updating credit card cycle:", error);
     return { ok: false as const, error: "Não foi possível salvar o ciclo" };
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -537,12 +534,16 @@ export async function getMobileHomeData(): Promise<{
   const familyId = await getActiveFamilyId();
   if (!familyId) return empty;
 
-  await ensureDefaultExpenseCategories(familyId);
-
   const prisma = getPrismaClient();
   const now = new Date();
 
   try {
+    // Seed categories only when the family has none (avoid upsert storm on every home load)
+    const categoryCount = await prisma.category.count({ where: { familyId } });
+    if (categoryCount === 0) {
+      await ensureDefaultExpenseCategories(familyId);
+    }
+
     const accounts = await prisma.financialAccount.findMany({
       where: { familyId, isActive: true },
       select: {
@@ -578,44 +579,6 @@ export async function getMobileHomeData(): Promise<{
         isValidCycleDay(a.paymentDueDay)
     );
 
-    const openInvoices: MobileHomeInvoice[] = [];
-
-    for (const card of creditCards) {
-      const cycle = getOpenStatementCycle({
-        statementClosingDay: card.statementClosingDay!,
-        paymentDueDay: card.paymentDueDay!,
-        now,
-      });
-
-      const agg = await prisma.transaction.aggregate({
-        where: {
-          familyId,
-          accountId: card.id,
-          type: "EXPENSE",
-          date: {
-            gte: cycle.periodStart,
-            lt: cycle.periodEnd,
-          },
-        },
-        _sum: { amount: true },
-      });
-
-      const raw = Number(agg._sum.amount ?? 0);
-      const openAmount = Math.abs(raw);
-
-      openInvoices.push({
-        accountId: card.id,
-        name: card.name,
-        color: card.color,
-        openAmount,
-        currency: card.currency,
-        closesLabel: formatCycleDayLabel(cycle.nextClosingDate),
-        dueLabel: formatCycleDayLabel(cycle.dueDate),
-        periodStart: cycle.periodStart.toISOString(),
-        periodEnd: cycle.periodEnd.toISOString(),
-      });
-    }
-
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(
       now.getFullYear(),
@@ -627,21 +590,65 @@ export async function getMobileHomeData(): Promise<{
       999
     );
 
-    const monthExpenses = await prisma.transaction.findMany({
-      where: {
-        familyId,
-        type: "EXPENSE",
-        date: { gte: startOfMonth, lte: endOfMonth },
-        categoryId: { not: null },
-      },
-      select: {
-        amount: true,
-        categoryId: true,
-        category: {
-          select: { id: true, name: true, icon: true, color: true },
+    const invoiceCycles = creditCards.map((card) => ({
+      card,
+      cycle: getOpenStatementCycle({
+        statementClosingDay: card.statementClosingDay!,
+        paymentDueDay: card.paymentDueDay!,
+        now,
+      }),
+    }));
+
+    const [invoiceAggs, monthExpenses] = await Promise.all([
+      Promise.all(
+        invoiceCycles.map(({ card, cycle }) =>
+          prisma.transaction.aggregate({
+            where: {
+              familyId,
+              accountId: card.id,
+              type: "EXPENSE",
+              date: {
+                gte: cycle.periodStart,
+                lt: cycle.periodEnd,
+              },
+            },
+            _sum: { amount: true },
+          })
+        )
+      ),
+      prisma.transaction.findMany({
+        where: {
+          familyId,
+          type: "EXPENSE",
+          date: { gte: startOfMonth, lte: endOfMonth },
+          categoryId: { not: null },
         },
-      },
-    });
+        select: {
+          amount: true,
+          categoryId: true,
+          category: {
+            select: { id: true, name: true, icon: true, color: true },
+          },
+        },
+      }),
+    ]);
+
+    const openInvoices: MobileHomeInvoice[] = invoiceCycles.map(
+      ({ card, cycle }, index) => {
+        const raw = Number(invoiceAggs[index]?._sum.amount ?? 0);
+        return {
+          accountId: card.id,
+          name: card.name,
+          color: card.color,
+          openAmount: Math.abs(raw),
+          currency: card.currency,
+          closesLabel: formatCycleDayLabel(cycle.nextClosingDate),
+          dueLabel: formatCycleDayLabel(cycle.dueDate),
+          periodStart: cycle.periodStart.toISOString(),
+          periodEnd: cycle.periodEnd.toISOString(),
+        };
+      }
+    );
 
     const byCategory = new Map<
       string,
@@ -683,6 +690,6 @@ export async function getMobileHomeData(): Promise<{
     console.error("Error loading mobile home data:", error);
     return empty;
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }

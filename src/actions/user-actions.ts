@@ -1,5 +1,7 @@
 "use server";
 
+import { getPrismaClient } from "@/lib/prisma";
+
 /**
  * USER ACTIONS FOR MULTI-TENANT BADGET APPLICATION
  * ================================================
@@ -64,7 +66,6 @@
  * - Error messages don't leak sensitive information
  */
 
-import { PrismaClient } from "@/generated/prisma";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -73,10 +74,6 @@ import { isAuthRequired } from "@/lib/local-guest";
 import { ensureLocalGuestAppUser } from "./local-guest-actions";
 
 // Prisma client instantiation per request (best practice)
-function getPrismaClient() {
-  return new PrismaClient();
-}
-
 // Types for better TypeScript support
 type CreateFamilyInput = {
   name: string;
@@ -187,7 +184,7 @@ export async function getCurrentAppUser() {
     console.error("Error getting current AppUser:", error);
     return null;
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -226,7 +223,7 @@ export async function updateCurrentAppUser(input: UpdateAppUserInput) {
       error: error instanceof Error ? error.message : "Update failed",
     };
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -271,7 +268,7 @@ export async function getUserFamilies() {
     console.error("Error getting user families:", error);
     return [];
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -319,7 +316,7 @@ export async function createFamily(input: CreateFamilyInput) {
       error: error instanceof Error ? error.message : "Failed to create family",
     };
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -350,7 +347,7 @@ export async function checkFamilyPermission(
     console.error("Error checking family permission:", error);
     return false;
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -444,7 +441,7 @@ export async function inviteFamilyMember(input: InviteFamilyMemberInput) {
         error instanceof Error ? error.message : "Failed to send invitation",
     };
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -540,7 +537,7 @@ export async function acceptFamilyInvitation(token: string) {
         error instanceof Error ? error.message : "Failed to accept invitation",
     };
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -608,7 +605,7 @@ export async function getFamilyDetails(familyId: string) {
     console.error("Error getting family details:", error);
     return null;
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -670,7 +667,7 @@ export async function removeFamilyMember(familyId: string, memberId: string) {
       error: error instanceof Error ? error.message : "Failed to remove member",
     };
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 

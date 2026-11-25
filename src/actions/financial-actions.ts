@@ -1,16 +1,14 @@
 "use server";
 
-import { PrismaClient, type AccountType } from "@/generated/prisma";
+import { getPrismaClient } from "@/lib/prisma";
+
+import type { AccountType } from "@/generated/prisma";
 import { revalidatePath } from "next/cache";
 import { getBankById } from "@/data/banks";
 import { getCurrentAppUser } from "./user-actions";
 import { ensureDefaultExpenseCategories } from "./expense-actions";
 
 // Prisma client instantiation per request (best practice)
-function getPrismaClient() {
-  return new PrismaClient();
-}
-
 async function getActiveFamilyId(): Promise<string | null> {
   const appUser = await getCurrentAppUser();
   return appUser?.familyMemberships[0]?.familyId || null;
@@ -266,7 +264,7 @@ export async function getFinancialOverview(): Promise<FinancialOverview> {
     console.error("Error fetching financial overview:", error);
     throw new Error("Failed to fetch financial overview");
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -402,7 +400,7 @@ export async function getEnhancedAccounts(): Promise<EnhancedAccount[]> {
     console.error("Error fetching enhanced accounts:", error);
     return [];
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -453,7 +451,7 @@ export async function getFinancialAccountById(accountId: string) {
     console.error("Error fetching account by ID:", error);
     return null;
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
 
@@ -518,6 +516,6 @@ export async function createManualFinancialAccount(input: { bankId: string }) {
       error: "Não foi possível cadastrar a conta",
     };
   } finally {
-    await prisma.$disconnect();
+    // shared client — do not disconnect
   }
 }
