@@ -67,14 +67,13 @@ import { getPrismaClient } from "@/lib/prisma";
  */
 
 import { auth } from "@/lib/auth";
+import { cache } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { FamilyRole, Prisma } from "@/generated/prisma";
 import { isAuthRequired } from "@/lib/local-guest";
 import { ensureLocalGuestAppUser } from "./local-guest-actions";
 
-// Prisma client instantiation per request (best practice)
-// Types for better TypeScript support
 type CreateFamilyInput = {
   name: string;
   description?: string;
@@ -107,10 +106,10 @@ export async function getCurrentAuthUser() {
 }
 
 /**
- * Get or create the current AppUser (application profile)
- * This is the recommended way to get user data for business logic
+ * Get or create the current AppUser (application profile).
+ * Cached per React request so multiple actions don't re-hit Neon/auth.
  */
-export async function getCurrentAppUser() {
+export const getCurrentAppUser = cache(async () => {
   const authUser = await getCurrentAuthUser();
   if (!authUser) {
     if (isAuthRequired()) {
@@ -122,7 +121,6 @@ export async function getCurrentAppUser() {
   const prisma = getPrismaClient();
 
   try {
-    // Try to get existing AppUser
     let appUser = await prisma.appUser.findUnique({
       where: { userId: authUser.id },
       include: {
@@ -134,7 +132,6 @@ export async function getCurrentAppUser() {
       },
     });
 
-    // Create AppUser if it doesn't exist (first login)
     if (!appUser) {
       try {
         appUser = await prisma.appUser.create({
@@ -152,12 +149,10 @@ export async function getCurrentAppUser() {
           },
         });
       } catch (createError) {
-        // Handle race condition - another request might have created the AppUser
         if (
           createError instanceof Error &&
           createError.message.includes("P2002")
         ) {
-          // Try to fetch the AppUser again
           appUser = await prisma.appUser.findUnique({
             where: { userId: authUser.id },
             include: {
@@ -170,7 +165,6 @@ export async function getCurrentAppUser() {
           });
 
           if (!appUser) {
-            // If still not found, re-throw the original error
             throw createError;
           }
         } else {
@@ -183,10 +177,8 @@ export async function getCurrentAppUser() {
   } catch (error) {
     console.error("Error getting current AppUser:", error);
     return null;
-  } finally {
-    // shared client — do not disconnect
   }
-}
+});
 
 /**
  * Update the current AppUser profile

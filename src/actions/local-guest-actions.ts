@@ -20,6 +20,7 @@ const appUserInclude = {
 
 /**
  * Ensures a single local guest User → AppUser → Family exists when auth is optional.
+ * Fast path: one read when already seeded (no write storm per request).
  */
 export async function ensureLocalGuestAppUser() {
   if (isAuthRequired()) {
@@ -30,6 +31,14 @@ export async function ensureLocalGuestAppUser() {
   const now = new Date();
 
   try {
+    const existing = await prisma.appUser.findUnique({
+      where: { id: LOCAL_GUEST_APP_USER_ID },
+      include: appUserInclude,
+    });
+    if (existing?.familyMemberships?.length) {
+      return existing;
+    }
+
     await prisma.user.upsert({
       where: { id: LOCAL_GUEST_USER_ID },
       create: {
@@ -40,9 +49,7 @@ export async function ensureLocalGuestAppUser() {
         createdAt: now,
         updatedAt: now,
       },
-      update: {
-        updatedAt: now,
-      },
+      update: {},
     });
 
     await prisma.appUser.upsert({
@@ -91,7 +98,5 @@ export async function ensureLocalGuestAppUser() {
   } catch (error) {
     console.error("Error ensuring local guest user:", error);
     return null;
-  } finally {
-    // shared client — do not disconnect
   }
 }
