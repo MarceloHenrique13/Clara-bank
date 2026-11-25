@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
-import { siteConfig } from "./config";
+import { siteConfig } from "./site";
 
 export const HOME_DOMAIN =
-  process.env.NEXT_PUBLIC_VERCEL_ENV === "production"
-    ? "https://badget.tech"
-    : process.env.NEXT_PUBLIC_VERCEL_ENV === "preview"
-      ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-      : "http://localhost:3000";
+  process.env.NEXT_PUBLIC_APP_URL ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000");
 
 export const APP_HOSTNAMES = new Set([
-  "badget.tech",
-  "preview.badget.tech",
+  "clara-bank.vercel.app",
   "localhost:8888",
   "localhost:3000",
   "localhost",
