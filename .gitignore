@@ -49,3 +49,5 @@ next-env.d.ts
 .content-collections
 .trigger
 .neon
+
+.env*
