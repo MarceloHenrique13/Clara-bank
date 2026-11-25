@@ -1,13 +1,33 @@
 import type { Metadata } from "next";
 import { siteConfig } from "./site";
 
-export const HOME_DOMAIN =
-  process.env.NEXT_PUBLIC_APP_URL ||
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-    : process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : "http://localhost:3000");
+function resolveHomeDomain(): string {
+  const candidates = [
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : undefined,
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
+    "http://localhost:3000",
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    try {
+      // Reject placeholders like "your_app_url_here"
+      const url = new URL(candidate);
+      if (url.protocol === "http:" || url.protocol === "https:") {
+        return url.origin;
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+
+  return "http://localhost:3000";
+}
+
+export const HOME_DOMAIN = resolveHomeDomain();
 
 export const APP_HOSTNAMES = new Set([
   "clara-bank.vercel.app",
