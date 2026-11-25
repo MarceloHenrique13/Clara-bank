@@ -61,6 +61,8 @@ export function PlaidLinkModal({ onSuccess }: BankConnectionModalProps) {
     setIsSubmitting(true);
     const result = await createManualFinancialAccount({
       bankId: selectedBank.id,
+      accountType:
+        selectedBank.type === "Credit Card" ? "CREDIT_CARD" : "CHECKING",
     });
     setIsSubmitting(false);
 

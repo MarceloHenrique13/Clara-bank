@@ -465,15 +465,41 @@ const BANK_ACCOUNT_COLORS: Record<string, string> = {
   inter: "#FF7A00",
 };
 
-function resolveManualAccountType(bankType: string): AccountType {
-  return bankType === "Credit Card" ? "CREDIT_CARD" : "CHECKING";
+const MANUAL_ACCOUNT_TYPES = [
+  "CHECKING",
+  "SAVINGS",
+  "CREDIT_CARD",
+] as const satisfies readonly AccountType[];
+
+type ManualAccountType = (typeof MANUAL_ACCOUNT_TYPES)[number];
+
+function isManualAccountType(value: string): value is ManualAccountType {
+  return (MANUAL_ACCOUNT_TYPES as readonly string[]).includes(value);
+}
+
+function accountTypeLabel(type: ManualAccountType): string {
+  switch (type) {
+    case "CREDIT_CARD":
+      return "Cartão";
+    case "SAVINGS":
+      return "Poupança";
+    default:
+      return "Conta";
+  }
 }
 
 /** Create a manual BRL account for organization (no Open Banking). */
-export async function createManualFinancialAccount(input: { bankId: string }) {
+export async function createManualFinancialAccount(input: {
+  bankId: string;
+  accountType: ManualAccountType;
+}) {
   const familyId = await getActiveFamilyId();
   if (!familyId) {
     return { ok: false as const, error: "Família não encontrada" };
+  }
+
+  if (!isManualAccountType(input.accountType)) {
+    return { ok: false as const, error: "Tipo de conta inválido" };
   }
 
   const bank = getBankById(input.bankId);
@@ -481,17 +507,21 @@ export async function createManualFinancialAccount(input: { bankId: string }) {
     return { ok: false as const, error: "Banco inválido" };
   }
 
-  const accountType = resolveManualAccountType(bank.type);
+  const accountType = input.accountType;
   const color = BANK_ACCOUNT_COLORS[bank.id] ?? "#6366F1";
+  const name = `${bank.displayName} · ${accountTypeLabel(accountType)}`;
 
   const prisma = getPrismaClient();
 
   try {
-    await ensureDefaultExpenseCategories(familyId);
+    const categoryCount = await prisma.category.count({ where: { familyId } });
+    if (categoryCount === 0) {
+      await ensureDefaultExpenseCategories(familyId);
+    }
 
     const account = await prisma.financialAccount.create({
       data: {
-        name: bank.displayName,
+        name,
         type: accountType,
         currency: "BRL",
         institution: bank.displayName,
@@ -515,7 +545,40 @@ export async function createManualFinancialAccount(input: { bankId: string }) {
       ok: false as const,
       error: "Não foi possível cadastrar a conta",
     };
-  } finally {
-    // shared client — do not disconnect
+  }
+}
+
+/** Soft-delete (deactivate) a financial account. */
+export async function deactivateFinancialAccount(accountId: string) {
+  const familyId = await getActiveFamilyId();
+  if (!familyId) {
+    return { ok: false as const, error: "Família não encontrada" };
+  }
+
+  const prisma = getPrismaClient();
+
+  try {
+    const account = await prisma.financialAccount.findFirst({
+      where: { id: accountId, familyId, isActive: true },
+    });
+    if (!account) {
+      return { ok: false as const, error: "Conta não encontrada" };
+    }
+
+    await prisma.financialAccount.update({
+      where: { id: accountId },
+      data: { isActive: false },
+    });
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/financial");
+    revalidatePath(`/dashboard/financial/${accountId}`);
+    revalidatePath("/dashboard/expense/new");
+    revalidatePath("/dashboard/transactions");
+
+    return { ok: true as const };
+  } catch (error) {
+    console.error("Error deactivating financial account:", error);
+    return { ok: false as const, error: "Não foi possível remover a conta" };
   }
 }

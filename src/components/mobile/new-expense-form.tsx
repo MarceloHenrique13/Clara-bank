@@ -63,6 +63,7 @@ type NewExpenseFormProps = {
   incomeCategories: ExpenseCategoryOption[];
   accounts: AccountOption[];
   initialType?: MoneyEntryType | null;
+  initialAccountId?: string | null;
 };
 
 function firstStepForType(type: MoneyEntryType): Step {
@@ -76,6 +77,7 @@ export function NewExpenseForm({
   incomeCategories,
   accounts,
   initialType = null,
+  initialAccountId = null,
 }: NewExpenseFormProps) {
   const router = useRouter();
   const [entryType, setEntryType] = React.useState<MoneyEntryType | null>(
@@ -88,7 +90,7 @@ export function NewExpenseForm({
   const [categoryId, setCategoryId] = React.useState<string | null>(null);
   const [note, setNote] = React.useState("");
   const [saving, setSaving] = React.useState(false);
-  const [accountId, setAccountId] = React.useState("");
+  const [accountId, setAccountId] = React.useState(initialAccountId ?? "");
   const [fromAccountId, setFromAccountId] = React.useState("");
   const [toAccountId, setToAccountId] = React.useState("");
   const [entryDate, setEntryDate] = React.useState(() => toDateInputValue());

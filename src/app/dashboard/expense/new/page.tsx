@@ -7,7 +7,7 @@ export const metadata = {
 };
 
 type PageProps = {
-  searchParams: Promise<{ type?: string }>;
+  searchParams: Promise<{ type?: string; accountId?: string }>;
 };
 
 function parseType(value?: string): MoneyEntryType | null {
@@ -25,6 +25,7 @@ function parseType(value?: string): MoneyEntryType | null {
 export default async function NewExpensePage({ searchParams }: PageProps) {
   const params = await searchParams;
   const initialType = parseType(params.type);
+  const initialAccountId = params.accountId?.trim() || null;
 
   const [expenseData, incomeData] = await Promise.all([
     getExpenseFormData("expense"),
@@ -37,6 +38,7 @@ export default async function NewExpensePage({ searchParams }: PageProps) {
       incomeCategories={incomeData.categories}
       accounts={expenseData.accounts}
       initialType={initialType}
+      initialAccountId={initialAccountId}
     />
   );
 }
