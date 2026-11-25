@@ -1,9 +1,4 @@
-import { FirstBentoAnimation } from "@/components/first-bento-animation";
-import { FourthBentoAnimation } from "@/components/fourth-bento-animation";
-import { SecondBentoAnimation } from "@/components/second-bento-animation";
-import { ThirdBentoAnimation } from "@/components/third-bento-animation";
 import { cn } from "@/lib/utils";
-import { motion } from "motion/react";
 
 export const Highlight = ({
   children,
@@ -331,35 +326,28 @@ export const siteConfig = {
     items: [
       {
         id: 1,
-        content: <FirstBentoAnimation />,
+        content: <div className="h-full w-full rounded-xl bg-muted/40" />,
         title: "Real-time Spending Analysis",
         description:
           "Track every transaction instantly. Get immediate insights into spending patterns, unusual purchases, and budget performance.",
       },
       {
         id: 2,
-        content: <SecondBentoAnimation />,
+        content: <div className="h-full w-full rounded-xl bg-muted/40" />,
         title: "Seamless Bank Integration",
         description:
           "Connect all your financial accounts securely. Unified dashboard for banks, credit cards, investments, and crypto wallets.",
       },
       {
         id: 3,
-        content: (
-          <ThirdBentoAnimation
-            data={[1200, 1800, 1500, 2200, 2800, 3100, 3500]}
-            toolTipValues={[
-              1200, 1800, 1500, 2200, 2800, 3100, 3500, 4000, 4500, 5000,
-            ]}
-          />
-        ),
+        content: <div className="h-full w-full rounded-xl bg-muted/40" />,
         title: "Financial Health Score",
         description:
           "Get a holistic view of your financial wellness. Track progress with actionable recommendations to improve your score.",
       },
       {
         id: 4,
-        content: <FourthBentoAnimation once={false} />,
+        content: <div className="h-full w-full rounded-xl bg-muted/40" />,
         title: "Smart Budget Optimization",
         description:
           "AI creates and adjusts your budget automatically. Receive alerts when overspending and tips to stay on track.",
@@ -397,7 +385,7 @@ export const siteConfig = {
         id: 1,
         content: (
           <div className="relative flex size-full items-center justify-center overflow-hidden">
-            <motion.div
+            <div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.5, ease: "easeOut" }}
@@ -449,7 +437,7 @@ export const siteConfig = {
                       </span>
                     </div>
                     <div className="relative h-3 bg-muted rounded-full overflow-hidden">
-                      <motion.div
+                      <div
                         className={cn(category.color, "h-full rounded-full")}
                         initial={{ width: `${category.current}%` }}
                         animate={{ width: `${category.optimized}%` }}
@@ -473,7 +461,7 @@ export const siteConfig = {
                   </div>
                 </div>
               </div>
-            </motion.div>
+            </div>
           </div>
         ),
         title: "Custom Budget Optimization",
@@ -484,7 +472,7 @@ export const siteConfig = {
         id: 2,
         content: (
           <div className="relative flex size-full items-center justify-center overflow-hidden">
-            <motion.div
+            <div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.5, ease: "easeOut" }}
@@ -545,7 +533,7 @@ export const siteConfig = {
                       color: "bg-purple-500",
                     },
                   ].map((item, index) => (
-                    <motion.div
+                    <div
                       key={item.name}
                       className={cn(
                         item.color,
@@ -567,12 +555,12 @@ export const siteConfig = {
                       }}
                     >
                       {item.name.slice(0, 3)}
-                    </motion.div>
+                    </div>
                   ))}
 
                   {/* Connecting Lines */}
                   {[0, 72, 144, 216, 288].map((angle, index) => (
-                    <motion.div
+                    <div
                       key={angle}
                       className="absolute w-px bg-border opacity-30"
                       style={{
@@ -602,7 +590,7 @@ export const siteConfig = {
                   </div>
                 </div>
               </div>
-            </motion.div>
+            </div>
           </div>
         ),
         title: "Behavioral Spending Insights",

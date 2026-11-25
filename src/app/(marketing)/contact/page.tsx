@@ -1,4 +1,4 @@
-import { siteConfig } from "@/lib/config";
+import { siteConfig } from "@/lib/site";
 import { Button } from "@/components/ui/button";
 import { Mail, MessageCircle, HelpCircle, Github } from "lucide-react";
 import Link from "next/link";
