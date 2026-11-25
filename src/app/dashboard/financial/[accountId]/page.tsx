@@ -79,7 +79,11 @@ export default async function AccountDetailPage({
         <p className="text-xs text-muted-foreground">
           {account.type === "CREDIT_CARD" ? "Fatura / saldo" : "Saldo"}
         </p>
-        <p className="mt-1 text-3xl font-semibold tabular-nums">
+        <p
+          className={`mt-1 text-3xl font-semibold tabular-nums ${
+            Number(account.balance) < 0 ? "text-rose-600" : ""
+          }`}
+        >
           {formatMoney(Number(account.balance), account.currency)}
         </p>
       </section>

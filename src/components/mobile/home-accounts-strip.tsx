@@ -74,7 +74,11 @@ export function HomeAccountsStrip({
             <p className="mt-1 line-clamp-1 text-sm font-semibold">
               {account.name}
             </p>
-            <p className="mt-2 font-mono text-base font-semibold tabular-nums tracking-tight">
+            <p
+              className={`mt-2 font-mono text-base font-semibold tabular-nums tracking-tight ${
+                account.balance < 0 ? "text-rose-600" : ""
+              }`}
+            >
               {formatMoney(account.balance, account.currency)}
             </p>
           </Link>

@@ -84,7 +84,11 @@ export default async function FinancialPage({
                   {account.institution ? ` · ${account.institution}` : ""}
                 </p>
               </div>
-              <p className="text-sm font-semibold tabular-nums">
+              <p
+                className={`text-sm font-semibold tabular-nums ${
+                  Number(account.balance) < 0 ? "text-rose-600" : ""
+                }`}
+              >
                 {formatMoney(Number(account.balance), account.currency)}
               </p>
             </Link>
