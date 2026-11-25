@@ -36,7 +36,7 @@ async function addAccount(formData: FormData) {
   });
 
   if (result.ok) {
-    redirect(`/dashboard/financial/${result.accountId}`);
+    redirect(`/dashboard/financial/${result.accountId}?edit=1`);
   }
 }
 
@@ -144,6 +144,9 @@ export default async function FinancialPage({
                 Trocar tipo
               </Link>
             </div>
+            <p className="text-[11px] text-muted-foreground">
+              Depois de criar, você define o nome e o saldo inicial na conta.
+            </p>
             <div className="grid grid-cols-2 gap-2">
               {banks.map((bank) => (
                 <form key={bank.id} action={addAccount}>

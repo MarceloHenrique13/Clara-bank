@@ -492,6 +492,10 @@ function accountTypeLabel(type: ManualAccountType): string {
 export async function createManualFinancialAccount(input: {
   bankId: string;
   accountType: ManualAccountType;
+  /** Optional display name; defaults to "Banco · Tipo" */
+  customName?: string;
+  /** Optional starting balance in reais (can be negative for cards) */
+  initialBalance?: number;
 }) {
   const familyId = await getActiveFamilyId();
   if (!familyId) {
@@ -509,7 +513,15 @@ export async function createManualFinancialAccount(input: {
 
   const accountType = input.accountType;
   const color = BANK_ACCOUNT_COLORS[bank.id] ?? "#6366F1";
-  const name = `${bank.displayName} · ${accountTypeLabel(accountType)}`;
+  const trimmedName = input.customName?.trim();
+  const name =
+    trimmedName ||
+    `${bank.displayName} · ${accountTypeLabel(accountType)}`;
+  const initialBalance =
+    typeof input.initialBalance === "number" &&
+    Number.isFinite(input.initialBalance)
+      ? input.initialBalance
+      : 0;
 
   const prisma = getPrismaClient();
 
@@ -527,6 +539,7 @@ export async function createManualFinancialAccount(input: {
         institution: bank.displayName,
         color,
         familyId,
+        balance: initialBalance,
         ...(accountType === "CREDIT_CARD"
           ? { statementClosingDay: 1, paymentDueDay: 10 }
           : {}),
@@ -580,5 +593,81 @@ export async function deactivateFinancialAccount(accountId: string) {
   } catch (error) {
     console.error("Error deactivating financial account:", error);
     return { ok: false as const, error: "Não foi possível remover a conta" };
+  }
+}
+
+/** Update display name and/or set absolute balance (creates adjust tx for delta). */
+export async function updateFinancialAccountDetails(input: {
+  accountId: string;
+  name?: string;
+  balance?: number;
+}) {
+  const familyId = await getActiveFamilyId();
+  if (!familyId) {
+    return { ok: false as const, error: "Família não encontrada" };
+  }
+
+  const name = input.name?.trim();
+  const hasBalance =
+    typeof input.balance === "number" && Number.isFinite(input.balance);
+
+  if (!name && !hasBalance) {
+    return { ok: false as const, error: "Nada para atualizar" };
+  }
+  if (name && name.length < 2) {
+    return { ok: false as const, error: "Nome muito curto" };
+  }
+
+  const prisma = getPrismaClient();
+
+  try {
+    const account = await prisma.financialAccount.findFirst({
+      where: { id: input.accountId, familyId, isActive: true },
+    });
+    if (!account) {
+      return { ok: false as const, error: "Conta não encontrada" };
+    }
+
+    const currentBalance = Number(account.balance);
+    const nextBalance = hasBalance ? input.balance! : currentBalance;
+    const delta = nextBalance - currentBalance;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.financialAccount.update({
+        where: { id: account.id },
+        data: {
+          ...(name ? { name } : {}),
+          ...(hasBalance ? { balance: nextBalance } : {}),
+        },
+      });
+
+      if (hasBalance && Math.abs(delta) >= 0.005) {
+        await tx.transaction.create({
+          data: {
+            date: new Date(),
+            description: "Ajuste de saldo",
+            merchant: "Ajuste de saldo",
+            amount: delta,
+            type: delta >= 0 ? "INCOME" : "EXPENSE",
+            status: "RECONCILED",
+            notes: "Ajuste manual de saldo",
+            tags: ["balance_adjust"],
+            isReconciled: true,
+            accountId: account.id,
+            familyId,
+          },
+        });
+      }
+    });
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/financial");
+    revalidatePath(`/dashboard/financial/${account.id}`);
+    revalidatePath("/dashboard/transactions");
+
+    return { ok: true as const };
+  } catch (error) {
+    console.error("Error updating financial account:", error);
+    return { ok: false as const, error: "Não foi possível atualizar a conta" };
   }
 }

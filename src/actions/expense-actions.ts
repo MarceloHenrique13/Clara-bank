@@ -431,6 +431,246 @@ export async function createTransfer(input: {
   }
 }
 
+export async function deleteTransaction(transactionId: string) {
+  const familyId = await getActiveFamilyId();
+  if (!familyId) {
+    return { ok: false as const, error: "Família não encontrada" };
+  }
+
+  const prisma = getPrismaClient();
+
+  try {
+    const existing = await prisma.transaction.findFirst({
+      where: { id: transactionId, familyId },
+    });
+    if (!existing) {
+      return { ok: false as const, error: "Lançamento não encontrado" };
+    }
+
+    const amount = Number(existing.amount);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.transaction.delete({ where: { id: existing.id } });
+      // Reverse the original effect on the account balance
+      await tx.financialAccount.update({
+        where: { id: existing.accountId },
+        data: { balance: { decrement: amount } },
+      });
+    });
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/transactions");
+    revalidatePath("/dashboard/financial");
+    revalidatePath(`/dashboard/financial/${existing.accountId}`);
+
+    return { ok: true as const };
+  } catch (error) {
+    console.error("Error deleting transaction:", error);
+    return { ok: false as const, error: "Não foi possível apagar" };
+  }
+}
+
+export async function updateTransactionDetails(input: {
+  transactionId: string;
+  description?: string;
+  amountCents?: number;
+  date?: string;
+  categoryId?: string | null;
+}) {
+  const familyId = await getActiveFamilyId();
+  if (!familyId) {
+    return { ok: false as const, error: "Família não encontrada" };
+  }
+
+  const prisma = getPrismaClient();
+
+  try {
+    const existing = await prisma.transaction.findFirst({
+      where: { id: input.transactionId, familyId },
+    });
+    if (!existing) {
+      return { ok: false as const, error: "Lançamento não encontrado" };
+    }
+
+    const oldAmount = Number(existing.amount);
+    const description = input.description?.trim();
+    const hasAmount =
+      typeof input.amountCents === "number" && input.amountCents > 0;
+
+    let nextAmount = oldAmount;
+    if (hasAmount) {
+      const absolute = input.amountCents! / 100;
+      nextAmount = oldAmount < 0 ? -absolute : absolute;
+      if (existing.type === "EXPENSE") nextAmount = -absolute;
+      if (existing.type === "INCOME") nextAmount = absolute;
+    }
+
+    const nextDate = input.date
+      ? parseLocalDateInput(input.date)
+      : existing.date;
+
+    if (input.categoryId) {
+      const category = await prisma.category.findFirst({
+        where: {
+          id: input.categoryId,
+          familyId,
+          isActive: true,
+        },
+      });
+      if (!category) {
+        return { ok: false as const, error: "Categoria inválida" };
+      }
+    }
+
+    const delta = nextAmount - oldAmount;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.transaction.update({
+        where: { id: existing.id },
+        data: {
+          ...(description
+            ? { description, merchant: description }
+            : {}),
+          ...(hasAmount ? { amount: nextAmount } : {}),
+          date: nextDate,
+          ...(input.categoryId !== undefined
+            ? { categoryId: input.categoryId }
+            : {}),
+        },
+      });
+
+      if (Math.abs(delta) >= 0.005) {
+        await tx.financialAccount.update({
+          where: { id: existing.accountId },
+          data: { balance: { increment: delta } },
+        });
+      }
+    });
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/transactions");
+    revalidatePath("/dashboard/financial");
+    revalidatePath(`/dashboard/financial/${existing.accountId}`);
+
+    return { ok: true as const };
+  } catch (error) {
+    console.error("Error updating transaction:", error);
+    return { ok: false as const, error: "Não foi possível salvar" };
+  }
+}
+
+/** Pay open credit-card statement (optionally debiting a checking/savings account). */
+export async function payCreditCardBill(input: {
+  cardAccountId: string;
+  amountCents: number;
+  fromAccountId?: string;
+  note?: string;
+}) {
+  const familyId = await getActiveFamilyId();
+  if (!familyId) {
+    return { ok: false as const, error: "Família não encontrada" };
+  }
+  if (!input.amountCents || input.amountCents <= 0) {
+    return { ok: false as const, error: "Digite um valor" };
+  }
+
+  const prisma = getPrismaClient();
+  const absolute = input.amountCents / 100;
+  const note = input.note?.trim() || "Pagamento de fatura";
+  const now = new Date();
+
+  try {
+    const card = await prisma.financialAccount.findFirst({
+      where: {
+        id: input.cardAccountId,
+        familyId,
+        isActive: true,
+        type: "CREDIT_CARD",
+      },
+    });
+    if (!card) {
+      return { ok: false as const, error: "Cartão inválido" };
+    }
+
+    let fromAccount = null as Awaited<
+      ReturnType<typeof prisma.financialAccount.findFirst>
+    >;
+    if (input.fromAccountId) {
+      fromAccount = await prisma.financialAccount.findFirst({
+        where: {
+          id: input.fromAccountId,
+          familyId,
+          isActive: true,
+          type: { in: ["CHECKING", "SAVINGS"] },
+        },
+      });
+      if (!fromAccount) {
+        return { ok: false as const, error: "Conta de pagamento inválida" };
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (fromAccount) {
+        await tx.transaction.create({
+          data: {
+            date: now,
+            description: note,
+            merchant: note,
+            amount: -absolute,
+            type: "TRANSFER",
+            status: "RECONCILED",
+            notes: `Pagamento · ${card.name}`,
+            tags: ["bill_payment"],
+            isReconciled: true,
+            accountId: fromAccount.id,
+            transferToAccountId: card.id,
+            familyId,
+          },
+        });
+        await tx.financialAccount.update({
+          where: { id: fromAccount.id },
+          data: { balance: { decrement: absolute } },
+        });
+      }
+
+      await tx.transaction.create({
+        data: {
+          date: now,
+          description: note,
+          merchant: note,
+          amount: absolute,
+          type: fromAccount ? "TRANSFER" : "INCOME",
+          status: "RECONCILED",
+          notes: fromAccount
+            ? `Recebido de ${fromAccount.name}`
+            : "Pagamento de fatura",
+          tags: ["bill_payment"],
+          isReconciled: true,
+          accountId: card.id,
+          familyId,
+        },
+      });
+      await tx.financialAccount.update({
+        where: { id: card.id },
+        data: { balance: { increment: absolute } },
+      });
+    });
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/transactions");
+    revalidatePath("/dashboard/financial");
+    revalidatePath(`/dashboard/financial/${card.id}`);
+    if (fromAccount) {
+      revalidatePath(`/dashboard/financial/${fromAccount.id}`);
+    }
+
+    return { ok: true as const, amount: absolute };
+  } catch (error) {
+    console.error("Error paying credit card bill:", error);
+    return { ok: false as const, error: "Não foi possível pagar a fatura" };
+  }
+}
+
 export async function updateCreditCardCycle(input: {
   accountId: string;
   statementClosingDay: number;
@@ -506,6 +746,7 @@ export type MobileHomeInvoice = {
   currency: string;
   closesLabel: string;
   dueLabel: string;
+  dueDate: string;
   periodStart: string;
   periodEnd: string;
 };
@@ -644,6 +885,7 @@ export async function getMobileHomeData(): Promise<{
           currency: card.currency,
           closesLabel: formatCycleDayLabel(cycle.nextClosingDate),
           dueLabel: formatCycleDayLabel(cycle.dueDate),
+          dueDate: cycle.dueDate.toISOString(),
           periodStart: cycle.periodStart.toISOString(),
           periodEnd: cycle.periodEnd.toISOString(),
         };

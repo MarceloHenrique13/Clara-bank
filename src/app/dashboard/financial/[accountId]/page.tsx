@@ -1,22 +1,21 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getFinancialAccountById } from "@/actions/financial-actions";
-import { deactivateFinancialAccount } from "@/actions/financial-actions";
-import { getTransactions } from "@/actions/dashboard-actions";
+import {
+  getFinancialAccountById,
+  deactivateFinancialAccount,
+} from "@/actions/financial-actions";
+import { getTransactions, getFinancialAccounts } from "@/actions/dashboard-actions";
+import { getMobileHomeData } from "@/actions/expense-actions";
 import { CreditCardCycleForm } from "@/components/financial/credit-card-cycle-form";
+import { AccountEditForm } from "@/components/mobile/account-edit-form";
+import { PayBillForm } from "@/components/mobile/pay-bill-form";
+import { TransactionRow } from "@/components/mobile/transaction-row";
 
 function formatMoney(value: number, currency = "BRL") {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency,
   }).format(value);
-}
-
-function formatDate(date: Date) {
-  return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "short",
-  }).format(date);
 }
 
 function typeLabel(type: string) {
@@ -42,20 +41,32 @@ async function removeAccount(formData: FormData) {
 
 export default async function AccountDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ accountId: string }>;
+  searchParams: Promise<{ pay?: string; edit?: string }>;
 }) {
   const { accountId } = await params;
+  const { pay, edit } = await searchParams;
   const account = await getFinancialAccountById(accountId);
 
   if (!account) {
     notFound();
   }
 
-  const transactions = await getTransactions({
-    accountId,
-    limit: 20,
-  });
+  const [transactions, accounts, home] = await Promise.all([
+    getTransactions({ accountId, limit: 20 }),
+    getFinancialAccounts(),
+    account.type === "CREDIT_CARD" ? getMobileHomeData() : null,
+  ]);
+
+  const invoice = home?.openInvoices.find((item) => item.accountId === account.id);
+  const openAmount = invoice?.openAmount ?? 0;
+  const payFromAccounts = accounts.filter(
+    (item) =>
+      item.id !== account.id &&
+      (item.type === "CHECKING" || item.type === "SAVINGS")
+  );
 
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col gap-6 px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
@@ -77,7 +88,7 @@ export default async function AccountDetailPage({
 
       <section className="rounded-2xl border border-border/60 bg-card px-4 py-4">
         <p className="text-xs text-muted-foreground">
-          {account.type === "CREDIT_CARD" ? "Fatura / saldo" : "Saldo"}
+          {account.type === "CREDIT_CARD" ? "Saldo do cartão" : "Saldo"}
         </p>
         <p
           className={`mt-1 text-3xl font-semibold tabular-nums ${
@@ -86,14 +97,48 @@ export default async function AccountDetailPage({
         >
           {formatMoney(Number(account.balance), account.currency)}
         </p>
+        {account.type === "CREDIT_CARD" && (
+          <div className="mt-4 border-t border-border/50 pt-3">
+            <p className="text-xs text-muted-foreground">Fatura em aberto</p>
+            <p
+              className={`mt-1 text-xl font-semibold tabular-nums ${
+                openAmount > 0 ? "text-rose-600" : ""
+              }`}
+            >
+              {formatMoney(openAmount, account.currency)}
+            </p>
+            {invoice && openAmount > 0 && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Fecha {invoice.closesLabel} · Vence {invoice.dueLabel}
+              </p>
+            )}
+          </div>
+        )}
       </section>
 
+      <AccountEditForm
+        accountId={account.id}
+        name={account.name}
+        balance={Number(account.balance)}
+        defaultOpen={edit === "1"}
+      />
+
       {account.type === "CREDIT_CARD" && (
-        <CreditCardCycleForm
-          accountId={account.id}
-          statementClosingDay={account.statementClosingDay}
-          paymentDueDay={account.paymentDueDay}
-        />
+        <>
+          <CreditCardCycleForm
+            accountId={account.id}
+            statementClosingDay={account.statementClosingDay}
+            paymentDueDay={account.paymentDueDay}
+          />
+          <div className={pay === "1" ? "ring-2 ring-brand/40 rounded-2xl" : ""}>
+            <PayBillForm
+              cardAccountId={account.id}
+              openAmount={openAmount}
+              payFromAccounts={payFromAccounts}
+              defaultOpen={pay === "1"}
+            />
+          </div>
+        </>
       )}
 
       <section className="flex flex-col gap-2">
@@ -116,32 +161,7 @@ export default async function AccountDetailPage({
             Nada lançado nesta conta ainda.
           </p>
         ) : (
-          transactions.map((tx) => {
-            const amount = Number(tx.amount);
-            return (
-              <div
-                key={tx.id}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="truncate font-medium">
-                    {tx.merchant || tx.description}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatDate(new Date(tx.date))}
-                    {tx.category?.name ? ` · ${tx.category.name}` : ""}
-                  </p>
-                </div>
-                <p
-                  className={`shrink-0 text-sm font-semibold tabular-nums ${
-                    amount < 0 ? "text-rose-600" : "text-emerald-600"
-                  }`}
-                >
-                  {formatMoney(amount, account.currency)}
-                </p>
-              </div>
-            );
-          })
+          transactions.map((tx) => <TransactionRow key={tx.id} tx={tx} />)
         )}
       </section>
 
